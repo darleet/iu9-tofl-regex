@@ -15,6 +15,7 @@ func TestService_Parse(t *testing.T) {
 	}{
 		{"valid", "(aa|bb)(?1)", true},
 		{"valid", "(aa|bb)\\1", true},
+		{"invalid", "INVALID INPUT", false},
 	}
 
 	for _, tt := range tests {
