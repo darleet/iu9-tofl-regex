@@ -1,8 +1,10 @@
 package parser_test
 
 import (
-	"github.com/darleet/iu9-tofl-regex/internal/service/parser"
+	"context"
 	"testing"
+
+	"github.com/darleet/iu9-tofl-regex/internal/service/parser"
 )
 
 func TestService_Parse(t *testing.T) {
@@ -18,7 +20,7 @@ func TestService_Parse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := parser.New()
-			if got := s.Parse(tt.in); got != tt.want {
+			if got := s.Parse(context.Background(), tt.in); got != tt.want {
 				t.Errorf("Service.Parse() = %v, want %v", got, tt.want)
 			}
 		})
