@@ -15,11 +15,13 @@ func TestService_Parse(t *testing.T) {
 	}{
 		{"valid/ссылка_на_выражение", "(aa|bb)(?1)", true},
 		{"valid/ссылка_на_строку", "(aa|bb)\\1", true},
+		{"valid/групп_захвата_9", "(((((((((a)a)a)a)a)a)a)a)a)", true},
 		{"invalid/некорректный_ввод", "INVALID INPUT", false},
 		{"invalid/ссылка_на_несуществующую_строку", "(aa|bb)\\2", false},
 		{"invalid/ссылка_на_неинициализированную_строку", "(\\1)(a|b)", false},
 		{"invalid/незакрытые_скобки", "((aa)abaa", false},
 		{"invalid/неоткрытые_скобки", "aa)aaab", false},
+		{"invalid/групп_захвата_больше_9", "((((((((((a)a)a)a)a)a)a)a)a)a)", false},
 	}
 
 	for _, tt := range tests {
