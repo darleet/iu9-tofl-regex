@@ -84,7 +84,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			return nil, errors.New("char not allowed: " + string(r[i]))
 		}
 
-		if r[i] == '*' && i-1 >= 0 && s.IsLetter(r[i-1]) {
+		if r[i] == '*' && i-1 >= 0 && (s.IsLetter(r[i-1]) || r[i-1] == ')') {
 			c := st[len(st)-1].GetLastChild()
 			cS := make([]*Node, 1)
 			cS[0] = c
