@@ -98,6 +98,22 @@ func NewTree(r *Node) *Tree {
 	}
 }
 
+func copyMap(m map[int]struct{}) map[int]struct{} {
+	newM := make(map[int]struct{})
+	for k := range m {
+		newM[k] = m[k]
+	}
+	return newM
+}
+
+func copySlice(s []*Node) []*Node {
+	newS := make([]*Node, len(s))
+	for i := range s {
+		newS[i] = s[i]
+	}
+	return newS
+}
+
 func (t *Tree) CheckStringrefs() error {
 	g := new(errgroup.Group)
 
@@ -122,43 +138,25 @@ func (t *Tree) CheckStringrefs() error {
 					}
 				}
 			} else if el.Type == RepeatableNode {
-				newSt := make([]*Node, len(st))
-				for i := range st {
-					newSt[i] = st[i]
-				}
-				newVisited := make(map[int]struct{})
-				for k := range visited {
-					newVisited[k] = struct{}{}
-				}
+				newSt := copySlice(st)
+				newVisited := copyMap(visited)
 				g.Go(func() error {
 					return f(newVisited, newSt)
 				})
 
-				newNewSt := make([]*Node, len(newSt))
-				for i := range st {
-					newNewSt[i] = newSt[i]
-				}
+				newNewSt := copySlice(st)
 				newNewSt = append(newNewSt, el.GetLastChild())
-				newNewVisited := make(map[int]struct{})
-				for k := range visited {
-					newNewVisited[k] = struct{}{}
-				}
+				newNewVisited := copyMap(visited)
 				g.Go(func() error {
 					return f(newNewVisited, newNewSt)
 				})
 			} else if el.Type == AlternativeNode {
 				visited[el.GroupNum] = struct{}{}
 				for _, cc := range el.Children {
-					newSt := make([]*Node, len(st))
-					for i := range st {
-						newSt[i] = st[i]
-					}
+					newSt := copySlice(st)
 					newSt = append(newSt, cc)
 
-					newVisited := make(map[int]struct{})
-					for k := range visited {
-						newVisited[k] = struct{}{}
-					}
+					newVisited := copyMap(visited)
 
 					g.Go(func() error {
 						return f(newVisited, newSt)
