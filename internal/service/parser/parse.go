@@ -7,24 +7,24 @@ import (
 )
 
 const (
-	SimpleNode       NodeType = iota // children are just nodes
-	RepeatableNode                   // same as simple, but repeatable
-	GroupNode                        // children are a group
-	IgnoredGroupNode                 // children are a group, but ignored by ref
-	AlternativeNode                  // children are branches, subset of GroupNode
-	BranchNode                       // branch of alternative node
-	GroupRefNode                     // only one child as ref
-	StringRefNode                    // only one child as ref
+	SimpleNode      NodeType = iota // children are just nodes
+	RepeatableNode                  // same as simple, but repeatable
+	GroupNode                       // children are a group
+	AlternativeNode                 // children are branches, subset of GroupNode
+	BranchNode                      // branch of alternative node
+	GroupRefNode                    // only one child as ref
+	StringRefNode                   // only one child as ref
 )
 
 type NodeType int
 
 type Node struct {
-	Value    rune
-	RefToNum int
-	Type     NodeType
-	Parent   *Node
-	Children []*Node
+	Value     rune
+	IsIgnored bool
+	RefToNum  int
+	Type      NodeType
+	Parent    *Node
+	Children  []*Node
 }
 
 func NewNode(t NodeType, p *Node, c []*Node) *Node {
@@ -130,7 +130,8 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			}
 			i++
 		} else if i < len(r)-2 && r[i] == '(' && r[i+1] == '?' && r[i+2] == ':' {
-			n := NewNode(IgnoredGroupNode, st[len(st)-1], nil)
+			n := NewNode(GroupNode, st[len(st)-1], nil)
+			n.IsIgnored = true
 			st[len(st)-1].Add(n)
 			st = append(st, n)
 			brCount++
@@ -174,11 +175,11 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			i++
 		} else if r[i] == ')' && brCount > 0 {
 			brCount--
-			if st[len(st)-1].Type != IgnoredGroupNode {
-				if st[len(st)-1].Type == BranchNode {
-					st[len(st)-2].Add(st[len(st)-1])
-					st = st[:len(st)-1]
-				}
+			if st[len(st)-1].Type == BranchNode {
+				st[len(st)-2].Add(st[len(st)-1])
+				st = st[:len(st)-1]
+			}
+			if !st[len(st)-1].IsIgnored {
 				tr.Groups[grIndices[len(grIndices)-1]] = st[len(st)-1]
 				grIndices = grIndices[:len(grIndices)-1]
 			}
