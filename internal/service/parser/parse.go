@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -21,6 +23,7 @@ type NodeType int
 type Node struct {
 	Value     rune
 	IsIgnored bool
+	GroupNum  int
 	RefToNum  int
 	Type      NodeType
 	Parent    *Node
@@ -75,17 +78,93 @@ func (n *Node) SetLastChild(v *Node) {
 }
 
 type Tree struct {
-	Groups       map[int]*Node
-	StrictGroups map[int]struct{}
-	Root         *Node
+	Groups map[int]*Node
+	Root   *Node
 }
 
 func NewTree(r *Node) *Tree {
 	return &Tree{
-		Groups:       make(map[int]*Node),
-		StrictGroups: make(map[int]struct{}),
-		Root:         r,
+		Groups: make(map[int]*Node),
+		Root:   r,
 	}
+}
+
+func (t *Tree) CheckStringrefs() error {
+	g := new(errgroup.Group)
+
+	var f func(visited map[int]struct{}, st []*Node) error
+	f = func(visited map[int]struct{}, st []*Node) error {
+		for len(st) > 0 {
+			el := st[len(st)-1]
+			st = st[:len(st)-1]
+			if el.Type == StringRefNode {
+				if _, ok := visited[el.RefToNum]; !ok {
+					return fmt.Errorf("string ref was not initialized: %v", el.RefToNum)
+				}
+			} else if el.Type == GroupNode {
+				visited[el.GroupNum] = struct{}{}
+			} else if el.Type == RepeatableNode {
+				newSt := make([]*Node, len(st))
+				for i := range st {
+					newSt[i] = st[i]
+				}
+				newVisited := make(map[int]struct{})
+				for k := range visited {
+					newVisited[k] = struct{}{}
+				}
+				g.Go(func() error {
+					return f(newVisited, newSt)
+				})
+
+				newNewSt := make([]*Node, len(newSt))
+				for i := range st {
+					newNewSt[i] = newSt[i]
+				}
+				newNewSt = append(newNewSt, el.GetLastChild())
+				newNewVisited := make(map[int]struct{})
+				for k := range visited {
+					newNewVisited[k] = struct{}{}
+				}
+				g.Go(func() error {
+					return f(newNewVisited, newNewSt)
+				})
+			} else if el.Type == AlternativeNode {
+				visited[el.GroupNum] = struct{}{}
+				for _, cc := range el.Children {
+					newSt := make([]*Node, len(st))
+					for i := range st {
+						newSt[i] = st[i]
+					}
+					newSt = append(newSt, cc)
+
+					newVisited := make(map[int]struct{})
+					for k := range visited {
+						newVisited[k] = struct{}{}
+					}
+
+					g.Go(func() error {
+						return f(newVisited, newSt)
+					})
+				}
+			}
+			for i := range el.Children {
+				st = append(st, el.Children[len(el.Children)-1-i])
+			}
+		}
+
+		return nil
+	}
+
+	st := make([]*Node, 0)
+	for i := range t.Root.Children {
+		st = append(st, t.Root.Children[len(t.Root.Children)-1-i])
+	}
+
+	g.Go(func() error {
+		return f(make(map[int]struct{}), st)
+	})
+
+	return g.Wait()
 }
 
 func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
@@ -152,7 +231,6 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			}
 			n := NewRefNode(StringRefNode, int(r[i+1]-'0'), st[len(st)-1])
 			st[len(st)-1].Add(n)
-			tr.StrictGroups[grNum] = struct{}{}
 			i += 2
 		} else if r[i] == '(' {
 			n := NewNode(GroupNode, st[len(st)-1], nil)
@@ -161,6 +239,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			brCount++
 			grCount++
 			grIndices = append(grIndices, grCount)
+			n.GroupNum = grCount
 			i++
 		} else if r[i] == ')' && brCount > 0 {
 			brCount--
@@ -187,45 +266,10 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 		return nil, errors.New("additional constraints were not met")
 	}
 
-	err := s.checkStrictGroups(tr)
+	err := tr.CheckStringrefs()
 	if err != nil {
 		return nil, err
 	}
 
 	return tr, nil
-}
-
-func (s *Service) checkStrictGroups(tr *Tree) error {
-	for k, v := range tr.Groups {
-		if _, ok := tr.StrictGroups[k]; !ok {
-			continue
-		}
-
-		c := make([]*Node, 0)
-		for _, cc := range v.Children {
-			c = append(c, cc)
-		}
-
-		var j int
-		for j < len(c) {
-			if c[j].Type == GroupRefNode {
-				return errors.New("strict group can't have group ref")
-			}
-			c = append(c, c[j].Children...)
-			j++
-		}
-
-		p := v.Parent
-		for p != nil {
-			if p.Type == AlternativeNode {
-				return errors.New("strict group can't be in alternative")
-			}
-			if p.Type == RepeatableNode {
-				return errors.New("strict group can't be in repeatable")
-			}
-			p = p.Parent
-		}
-	}
-
-	return nil
 }
