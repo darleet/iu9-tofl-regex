@@ -19,23 +19,26 @@ const (
 type NodeType int
 
 type Node struct {
-	Type     NodeType
 	Value    rune
+	Parent   *Node
+	Type     NodeType
 	Children []*Node
 }
 
-func NewNode(t NodeType, c []*Node) *Node {
+func NewNode(t NodeType, p *Node, c []*Node) *Node {
 	return &Node{
-		Type:     t,
 		Value:    '0',
+		Parent:   p,
+		Type:     t,
 		Children: c,
 	}
 }
 
-func NewRuneNode(v rune) *Node {
+func NewRuneNode(v rune, p *Node) *Node {
 	return &Node{
-		Type:     SimpleNode,
 		Value:    v,
+		Parent:   p,
+		Type:     SimpleNode,
 		Children: nil,
 	}
 }
@@ -44,6 +47,7 @@ func (n *Node) Add(other *Node) {
 	if len(n.Children) == 1 && (n.Type == GroupRefNode || n.Type == StringRefNode) {
 		panic("group ref and string ref can have only one child")
 	}
+	other.Parent = n
 	n.Children = append(n.Children, other)
 }
 
@@ -52,6 +56,7 @@ func (n *Node) GetLastChild() *Node {
 }
 
 func (n *Node) SetLastChild(v *Node) {
+	v.Parent = n
 	n.Children[len(n.Children)-1] = v
 }
 
@@ -71,7 +76,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 	r := []rune(regex)
 
 	st := make([]*Node, 1)
-	st[0] = NewNode(SimpleNode, nil)
+	st[0] = NewNode(SimpleNode, nil, nil)
 	tr := NewTree(st[0])
 
 	var i int
@@ -88,20 +93,21 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			c := st[len(st)-1].GetLastChild()
 			cS := make([]*Node, 1)
 			cS[0] = c
-			n := NewNode(RepeatableNode, cS)
+			n := NewNode(RepeatableNode, st[len(st)-1], cS)
 			st[len(st)-1].SetLastChild(n)
 			i++
 		} else if r[i] == '|' && i-1 >= 0 && i+1 <= len(r)-1 {
 			if st[len(st)-1].Type == BranchNode {
 				st[len(st)-2].Add(st[len(st)-1])
 				st = st[:len(st)-1]
-				st = append(st, NewNode(BranchNode, nil))
+				n := NewNode(BranchNode, st[len(st)-1], nil)
+				st = append(st, n)
 			} else {
 				st[len(st)-1].Type = AlternativeNode
-				n := NewNode(BranchNode, st[len(st)-1].Children)
+				n := NewNode(BranchNode, st[len(st)-1], st[len(st)-1].Children)
 				st[len(st)-1].Children = make([]*Node, 1)
 				st[len(st)-1].Children[0] = n
-				st = append(st, NewNode(BranchNode, nil))
+				st = append(st, NewNode(BranchNode, st[len(st)-1], nil))
 			}
 			i++
 		} else if i < len(r)-3 && r[i] == '(' && r[i+1] == '?' && s.IsDigit(r[i+2]) && r[i+3] == ')' {
@@ -124,7 +130,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			}
 			i += 2
 		} else if r[i] == '(' {
-			n := NewNode(GroupNode, nil)
+			n := NewNode(GroupNode, st[len(st)-1], nil)
 			st[len(st)-1].Add(n)
 			st = append(st, n)
 			brCount++
@@ -140,7 +146,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			st = st[:len(st)-1]
 			i++
 		} else if s.IsLetter(r[i]) {
-			n := NewRuneNode(r[i])
+			n := NewRuneNode(r[i], st[len(st)-1])
 			st[len(st)-1].Add(n)
 			i++
 		} else {
