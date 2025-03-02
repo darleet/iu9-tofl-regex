@@ -33,7 +33,6 @@ type Node struct {
 	IsIgnored bool
 	GroupNum  int
 	RefToNum  int
-	status    Status
 	Type      NodeType
 	Parent    *Node
 	Children  []*Node
@@ -106,6 +105,14 @@ func copyMap(m map[int]struct{}) map[int]struct{} {
 	return newM
 }
 
+func copyStatusMap(m map[*Node]Status) map[*Node]Status {
+	newM := make(map[*Node]Status)
+	for k := range m {
+		newM[k] = m[k]
+	}
+	return newM
+}
+
 func copySlice(s []*Node) []*Node {
 	newS := make([]*Node, len(s))
 	for i := range s {
@@ -117,8 +124,8 @@ func copySlice(s []*Node) []*Node {
 func (t *Tree) CheckStringrefs() error {
 	g := new(errgroup.Group)
 
-	var f func(visited map[int]struct{}, st []*Node) error
-	f = func(visited map[int]struct{}, st []*Node) error {
+	var f func(visited map[int]struct{}, statuses map[*Node]Status, st []*Node) error
+	f = func(visited map[int]struct{}, statuses map[*Node]Status, st []*Node) error {
 		for len(st) > 0 {
 			el := st[len(st)-1]
 			st = st[:len(st)-1]
@@ -126,12 +133,21 @@ func (t *Tree) CheckStringrefs() error {
 				if _, ok := visited[el.RefToNum]; !ok {
 					return fmt.Errorf("string ref was not initialized: %v", el.RefToNum)
 				}
+			} else if el.Type == GroupRefNode {
+				if statuses[el] == VisitingChildren {
+					statuses[el] = VisitedChildren
+				} else if statuses[el] == Unknown {
+					statuses[el] = VisitingChildren
+					refEl := t.Groups[el.RefToNum]
+					st = append(st, el)
+					st = append(st, refEl)
+				}
 			} else if el.Type == GroupNode {
-				if el.status == VisitingChildren {
+				if statuses[el] == VisitingChildren {
 					visited[el.GroupNum] = struct{}{}
-					el.status = VisitedChildren
-				} else if el.status == Unknown {
-					el.status = VisitingChildren
+					statuses[el] = VisitedChildren
+				} else if statuses[el] == Unknown {
+					statuses[el] = VisitingChildren
 					st = append(st, el)
 					for i := range el.Children {
 						st = append(st, el.Children[len(el.Children)-1-i])
@@ -140,27 +156,37 @@ func (t *Tree) CheckStringrefs() error {
 			} else if el.Type == RepeatableNode {
 				newSt := copySlice(st)
 				newVisited := copyMap(visited)
+				newStatus := copyStatusMap(statuses)
 				g.Go(func() error {
-					return f(newVisited, newSt)
+					return f(newVisited, newStatus, newSt)
 				})
 
 				newNewSt := copySlice(st)
 				newNewSt = append(newNewSt, el.GetLastChild())
 				newNewVisited := copyMap(visited)
+				newNewStatus := copyStatusMap(statuses)
 				g.Go(func() error {
-					return f(newNewVisited, newNewSt)
+					return f(newNewVisited, newNewStatus, newNewSt)
 				})
 			} else if el.Type == AlternativeNode {
-				visited[el.GroupNum] = struct{}{}
-				for _, cc := range el.Children {
-					newSt := copySlice(st)
-					newSt = append(newSt, cc)
+				if statuses[el] == VisitingChildren {
+					visited[el.GroupNum] = struct{}{}
+					statuses[el] = VisitedChildren
+				} else if statuses[el] == Unknown {
+					for _, cc := range el.Children {
+						newSt := copySlice(st)
+						newSt = append(newSt, el)
+						newSt = append(newSt, cc)
 
-					newVisited := copyMap(visited)
+						newVisited := copyMap(visited)
+						newStatus := copyStatusMap(statuses)
+						newStatus[el] = VisitingChildren
 
-					g.Go(func() error {
-						return f(newVisited, newSt)
-					})
+						g.Go(func() error {
+							return f(newVisited, newStatus, newSt)
+						})
+					}
+					return nil
 				}
 			} else {
 				for i := range el.Children {
@@ -178,7 +204,7 @@ func (t *Tree) CheckStringrefs() error {
 	}
 
 	g.Go(func() error {
-		return f(make(map[int]struct{}), st)
+		return f(make(map[int]struct{}), make(map[*Node]Status), st)
 	})
 
 	return g.Wait()
