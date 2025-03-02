@@ -158,14 +158,7 @@ func (t *Tree) CheckStringrefs() error {
 				g.Go(func() error {
 					return f(newVisited, newStatus, newSt)
 				})
-
-				newNewSt := copySlice(st)
-				newNewSt = append(newNewSt, el.GetLastChild())
-				newNewVisited := copyMap(visited)
-				newNewStatus := copyStatusMap(statuses)
-				g.Go(func() error {
-					return f(newNewVisited, newNewStatus, newNewSt)
-				})
+				st = append(st, el.GetLastChild())
 			} else if el.Type == AlternativeNode {
 				if statuses[el] == VisitingChildren {
 					visited[el.GroupNum] = struct{}{}
