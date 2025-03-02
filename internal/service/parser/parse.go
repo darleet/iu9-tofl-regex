@@ -143,17 +143,6 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			n := NewRefNode(GroupRefNode, int(r[i+2]-'0'), st[len(st)-1])
 			st[len(st)-1].Add(n)
 			i += 4
-		} else if i < len(r)-3 && r[i] == '(' && r[i+1] == '\\' && s.IsDigit(r[i+2]) && r[i+3] == ')' {
-			grNum := int(r[i+2] - '0')
-			if grNum > grCount {
-				return nil, errors.New(
-					fmt.Sprintf("cannot use str ref: groups < x (%v < %c)", grCount, r[i+2]),
-				)
-			}
-			n := NewRefNode(StringRefNode, int(r[i+2]-'0'), st[len(st)-1])
-			st[len(st)-1].Add(n)
-			tr.StrictGroups[grNum] = struct{}{}
-			i += 4
 		} else if i < len(r)-1 && r[i] == '\\' && s.IsDigit(r[i+1]) {
 			grNum := int(r[i+1] - '0')
 			if grNum > grCount {
