@@ -1,6 +1,10 @@
 package parser
 
-import "context"
+import (
+	"context"
+	"errors"
+	"fmt"
+)
 
 const (
 	SimpleNode      NodeType = iota // children are just nodes
@@ -63,7 +67,7 @@ func NewTree(r *Node) *Tree {
 	}
 }
 
-func (s *Service) Parse(ctx context.Context, regex string) bool {
+func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 	r := []rune(regex)
 
 	st := make([]*Node, 1)
@@ -77,7 +81,7 @@ func (s *Service) Parse(ctx context.Context, regex string) bool {
 	for i < len(r) {
 		_, ok := s.allowedChars[r[i]]
 		if !ok {
-			return false
+			return nil, errors.New("char not allowed: " + string(r[i]))
 		}
 
 		if r[i] == '*' && i-1 >= 0 && s.IsLetter(r[i-1]) {
@@ -105,12 +109,16 @@ func (s *Service) Parse(ctx context.Context, regex string) bool {
 			i += 4
 		} else if i < len(r)-3 && r[i] == '(' && r[i+1] == '\\' && s.IsDigit(r[i+2]) && r[i+3] == ')' {
 			if int(r[i+2]-'0') > grCount {
-				return false
+				return nil, errors.New(
+					fmt.Sprintf("cannot use str ref: groups < x (%v < %c)", grCount, r[i+2]),
+				)
 			}
 			i += 4
 		} else if i < len(r)-1 && r[i] == '\\' && s.IsDigit(r[i+1]) {
 			if int(r[i+1]-'0') > grCount {
-				return false
+				return nil, errors.New(
+					fmt.Sprintf("cannot use str ref: groups < x (%v < %c)", grCount, r[i+1]),
+				)
 			}
 			i += 2
 		} else if r[i] == '(' {
@@ -131,15 +139,15 @@ func (s *Service) Parse(ctx context.Context, regex string) bool {
 			n := NewRuneNode(r[i])
 			st[len(st)-1].Add(n)
 		} else {
-			return false
+			return nil, errors.New(fmt.Sprintf("cannot use symbol %c on position %v", r[i], i))
 		}
 
 		i++
 	}
 
 	if brCount != 0 || grCount > 9 || int(maxNum-'0') > grCount {
-		return false
+		return nil, errors.New("additional constraints were not met")
 	}
 
-	return true
+	return tr, nil
 }
