@@ -95,8 +95,10 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 	st[0] = NewNode(SimpleNode, nil, nil)
 	tr := NewTree(st[0])
 
+	grIndices := make([]int, 0)
+
 	var i int
-	var brCount, grCount, grIndex int
+	var brCount, grCount int
 	var maxNum rune
 
 	for i < len(r) {
@@ -127,6 +129,12 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 				st = append(st, NewNode(BranchNode, st[len(st)-1], nil))
 			}
 			i++
+		} else if i < len(r)-2 && r[i] == '(' && r[i+1] == '?' && r[i+2] == ':' {
+			n := NewNode(IgnoredGroupNode, st[len(st)-1], nil)
+			st[len(st)-1].Add(n)
+			st = append(st, n)
+			brCount++
+			i += 3
 		} else if i < len(r)-3 && r[i] == '(' && r[i+1] == '?' && s.IsDigit(r[i+2]) && r[i+3] == ')' {
 			if r[i+2] > maxNum {
 				maxNum = r[i+2]
@@ -161,18 +169,20 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			st[len(st)-1].Add(n)
 			st = append(st, n)
 			brCount++
-			grIndex++
+			grCount++
+			grIndices = append(grIndices, grCount)
 			i++
 		} else if r[i] == ')' && brCount > 0 {
 			brCount--
-			grCount++
-			if st[len(st)-1].Type == BranchNode {
-				st[len(st)-2].Add(st[len(st)-1])
-				st = st[:len(st)-1]
+			if st[len(st)-1].Type != IgnoredGroupNode {
+				if st[len(st)-1].Type == BranchNode {
+					st[len(st)-2].Add(st[len(st)-1])
+					st = st[:len(st)-1]
+				}
+				tr.Groups[grIndices[len(grIndices)-1]] = st[len(st)-1]
+				grIndices = grIndices[:len(grIndices)-1]
 			}
-			tr.Groups[grIndex] = st[len(st)-1]
 			st = st[:len(st)-1]
-			grIndex--
 			i++
 		} else if s.IsLetter(r[i]) {
 			n := NewRuneNode(r[i], st[len(st)-1])
