@@ -61,14 +61,16 @@ func (n *Node) SetLastChild(v *Node) {
 }
 
 type Tree struct {
-	Groups map[int]*Node
-	Root   *Node
+	Groups       map[int]*Node
+	StrictGroups map[int]*Node // subset of Groups
+	Root         *Node
 }
 
 func NewTree(r *Node) *Tree {
 	return &Tree{
-		Groups: make(map[int]*Node),
-		Root:   r,
+		Groups:       make(map[int]*Node),
+		StrictGroups: make(map[int]*Node),
+		Root:         r,
 	}
 }
 
@@ -94,6 +96,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			cS := make([]*Node, 1)
 			cS[0] = c
 			n := NewNode(RepeatableNode, st[len(st)-1], cS)
+			c.Parent = n
 			st[len(st)-1].SetLastChild(n)
 			i++
 		} else if r[i] == '|' && i-1 >= 0 && i+1 <= len(r)-1 {
@@ -116,18 +119,22 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			}
 			i += 4
 		} else if i < len(r)-3 && r[i] == '(' && r[i+1] == '\\' && s.IsDigit(r[i+2]) && r[i+3] == ')' {
-			if int(r[i+2]-'0') > grCount {
+			grNum := int(r[i+2] - '0')
+			if grNum > grCount {
 				return nil, errors.New(
 					fmt.Sprintf("cannot use str ref: groups < x (%v < %c)", grCount, r[i+2]),
 				)
 			}
+			tr.StrictGroups[grNum] = tr.Groups[grNum]
 			i += 4
 		} else if i < len(r)-1 && r[i] == '\\' && s.IsDigit(r[i+1]) {
-			if int(r[i+1]-'0') > grCount {
+			grNum := int(r[i+1] - '0')
+			if grNum > grCount {
 				return nil, errors.New(
 					fmt.Sprintf("cannot use str ref: groups < x (%v < %c)", grCount, r[i+1]),
 				)
 			}
+			tr.StrictGroups[grNum] = tr.Groups[grNum]
 			i += 2
 		} else if r[i] == '(' {
 			n := NewNode(GroupNode, st[len(st)-1], nil)
@@ -156,6 +163,19 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 
 	if brCount != 0 || grCount > 9 || int(maxNum-'0') > grCount {
 		return nil, errors.New("additional constraints were not met")
+	}
+
+	for _, v := range tr.StrictGroups {
+		p := v.Parent
+		for p != nil {
+			if p.Type == AlternativeNode {
+				return nil, errors.New("strict group can't be in alternative")
+			}
+			if p.Type == RepeatableNode {
+				return nil, errors.New("strict group can't be in repeatable")
+			}
+			p = p.Parent
+		}
 	}
 
 	return tr, nil
