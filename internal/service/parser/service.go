@@ -10,6 +10,8 @@ type Service struct {
 func New() *Service {
 	return &Service{
 		allowedChars: GetAllowedChars(),
+		operators:    GetOperators(),
+		letters:      GetLetters(),
 		digits:       GetDigits(),
 	}
 }
