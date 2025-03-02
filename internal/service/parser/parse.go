@@ -90,6 +90,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			cS[0] = c
 			n := NewNode(RepeatableNode, cS)
 			st[len(st)-1].SetLastChild(n)
+			i++
 		} else if r[i] == '|' && i-1 >= 0 && i+1 <= len(r)-1 {
 			if st[len(st)-1].Type == BranchNode {
 				st[len(st)-2].Add(st[len(st)-1])
@@ -102,6 +103,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 				st[len(st)-1].Children[0] = n
 				st = append(st, NewNode(BranchNode, nil))
 			}
+			i++
 		} else if i < len(r)-3 && r[i] == '(' && r[i+1] == '?' && s.IsDigit(r[i+2]) && r[i+3] == ')' {
 			if r[i+2] > maxNum {
 				maxNum = r[i+2]
@@ -126,6 +128,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			st[len(st)-1].Add(n)
 			st = append(st, n)
 			brCount++
+			i++
 		} else if r[i] == ')' && brCount > 0 {
 			brCount--
 			grCount++
@@ -135,14 +138,14 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			}
 			tr.Groups[grCount] = st[len(st)-1]
 			st = st[:len(st)-1]
+			i++
 		} else if s.IsLetter(r[i]) {
 			n := NewRuneNode(r[i])
 			st[len(st)-1].Add(n)
+			i++
 		} else {
 			return nil, errors.New(fmt.Sprintf("cannot use symbol %c on position %v", r[i], i))
 		}
-
-		i++
 	}
 
 	if brCount != 0 || grCount > 9 || int(maxNum-'0') > grCount {

@@ -15,7 +15,17 @@ func TestService_Parse(t *testing.T) {
 		in      string
 		wantErr bool
 	}{
+		{"valid/одиночный_символ", "a", false},
+		{"valid/символ_в_группе", "(aa)", false},
+		{"valid/символы_вокруг_группы", "aa(bb)aa", false},
+		{"valid/астериск", "a*", false},
+		{"valid/группа_с_астериском", "(ab)*", false},
+		{"valid/альтернатива_с_астериском", "(aa|bb)*", false},
 		{"valid/ссылка_на_выражение", "(aa|bb)(?1)", false},
+		{"valid/ссылка_на_выражение_изнутри", "(a(?1)b)", false},
+		{"valid/ссылка_на_выражение_изнутри_с_альтернативой", "(aa|b(?1))", false},
+		{"valid/ссылка_на_альтернативу_со_вложенностью", "(a|(bb))(?2)", false},
+		{"valid/множественная_альтернатива", "(aa|bb|cc|dd(?1))(?1)", false},
 		{"valid/ссылка_на_строку", "(aa|bb)\\1", false},
 		{"valid/групп_захвата_9", "(((((((((a)a)a)a)a)a)a)a)a)", false},
 		{"invalid/некорректный_ввод", "INVALID INPUT", true},
@@ -24,6 +34,8 @@ func TestService_Parse(t *testing.T) {
 		{"invalid/незакрытые_скобки", "((aa)abaa", true},
 		{"invalid/неоткрытые_скобки", "aa)aaab", true},
 		{"invalid/групп_захвата_больше_9", "((((((((((a)a)a)a)a)a)a)a)a)a)", true},
+		{"invalid/ссылка_на_альтернативу_с_астериском", "(a|b)*\\1", true},
+		{"invalid/ссылка_на_ветку_альтернативы", "(a(bb)|b(cc))\\2", true},
 	}
 
 	for _, tt := range tests {
