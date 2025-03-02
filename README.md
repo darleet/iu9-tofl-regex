@@ -14,5 +14,5 @@ go test -v ./...
 Для запуска парсинга файла выполните команду:
 
 ```bash
-go run cmd/main/main.go regex.txt
+go run cmd/main/main.go
 ```
