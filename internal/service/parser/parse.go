@@ -198,6 +198,15 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 		return nil, errors.New("additional constraints were not met")
 	}
 
+	err := s.checkStrictGroups(tr)
+	if err != nil {
+		return nil, err
+	}
+
+	return tr, nil
+}
+
+func (s *Service) checkStrictGroups(tr *Tree) error {
 	for k, v := range tr.Groups {
 		if _, ok := tr.StrictGroups[k]; !ok {
 			continue
@@ -211,7 +220,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 		var j int
 		for j < len(c) {
 			if c[j].Type == GroupRefNode {
-				return nil, errors.New("strict group can't have group ref")
+				return errors.New("strict group can't have group ref")
 			}
 			c = append(c, c[j].Children...)
 			j++
@@ -220,14 +229,14 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 		p := v.Parent
 		for p != nil {
 			if p.Type == AlternativeNode {
-				return nil, errors.New("strict group can't be in alternative")
+				return errors.New("strict group can't be in alternative")
 			}
 			if p.Type == RepeatableNode {
-				return nil, errors.New("strict group can't be in repeatable")
+				return errors.New("strict group can't be in repeatable")
 			}
 			p = p.Parent
 		}
 	}
 
-	return tr, nil
+	return nil
 }
