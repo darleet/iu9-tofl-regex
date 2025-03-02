@@ -134,9 +134,7 @@ func (t *Tree) CheckStringrefs() error {
 					return fmt.Errorf("string ref was not initialized: %v", el.RefToNum)
 				}
 			} else if el.Type == GroupRefNode {
-				if statuses[el] == VisitingChildren {
-					statuses[el] = VisitedChildren
-				} else if statuses[el] == Unknown {
+				if statuses[el] == Unknown {
 					statuses[el] = VisitingChildren
 					refEl := t.Groups[el.RefToNum]
 					st = append(st, el)
