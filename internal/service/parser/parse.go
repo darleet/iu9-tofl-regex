@@ -7,13 +7,14 @@ import (
 )
 
 const (
-	SimpleNode      NodeType = iota // children are just nodes
-	RepeatableNode                  // same as simple, but repeatable
-	GroupNode                       // children are a group
-	AlternativeNode                 // children are branches, subset of GroupNode
-	BranchNode                      // branch of alternative node
-	GroupRefNode                    // only one child as ref
-	StringRefNode                   // only one child as ref
+	SimpleNode       NodeType = iota // children are just nodes
+	RepeatableNode                   // same as simple, but repeatable
+	GroupNode                        // children are a group
+	IgnoredGroupNode                 // children are a group, but ignored by ref
+	AlternativeNode                  // children are branches, subset of GroupNode
+	BranchNode                       // branch of alternative node
+	GroupRefNode                     // only one child as ref
+	StringRefNode                    // only one child as ref
 )
 
 type NodeType int
@@ -75,14 +76,14 @@ func (n *Node) SetLastChild(v *Node) {
 
 type Tree struct {
 	Groups       map[int]*Node
-	StrictGroups map[int]*Node // subset of Groups
+	StrictGroups map[int]struct{}
 	Root         *Node
 }
 
 func NewTree(r *Node) *Tree {
 	return &Tree{
 		Groups:       make(map[int]*Node),
-		StrictGroups: make(map[int]*Node),
+		StrictGroups: make(map[int]struct{}),
 		Root:         r,
 	}
 }
@@ -95,7 +96,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 	tr := NewTree(st[0])
 
 	var i int
-	var brCount, grCount int
+	var brCount, grCount, grIndex int
 	var maxNum rune
 
 	for i < len(r) {
@@ -142,7 +143,7 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			}
 			n := NewRefNode(StringRefNode, int(r[i+2]-'0'), st[len(st)-1])
 			st[len(st)-1].Add(n)
-			tr.StrictGroups[grNum] = tr.Groups[grNum]
+			tr.StrictGroups[grNum] = struct{}{}
 			i += 4
 		} else if i < len(r)-1 && r[i] == '\\' && s.IsDigit(r[i+1]) {
 			grNum := int(r[i+1] - '0')
@@ -153,13 +154,14 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			}
 			n := NewRefNode(StringRefNode, int(r[i+1]-'0'), st[len(st)-1])
 			st[len(st)-1].Add(n)
-			tr.StrictGroups[grNum] = tr.Groups[grNum]
+			tr.StrictGroups[grNum] = struct{}{}
 			i += 2
 		} else if r[i] == '(' {
 			n := NewNode(GroupNode, st[len(st)-1], nil)
 			st[len(st)-1].Add(n)
 			st = append(st, n)
 			brCount++
+			grIndex++
 			i++
 		} else if r[i] == ')' && brCount > 0 {
 			brCount--
@@ -168,8 +170,9 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 				st[len(st)-2].Add(st[len(st)-1])
 				st = st[:len(st)-1]
 			}
-			tr.Groups[grCount] = st[len(st)-1]
+			tr.Groups[grIndex] = st[len(st)-1]
 			st = st[:len(st)-1]
+			grIndex--
 			i++
 		} else if s.IsLetter(r[i]) {
 			n := NewRuneNode(r[i], st[len(st)-1])
@@ -184,7 +187,11 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 		return nil, errors.New("additional constraints were not met")
 	}
 
-	for _, v := range tr.StrictGroups {
+	for k, v := range tr.Groups {
+		if _, ok := tr.StrictGroups[k]; !ok {
+			continue
+		}
+
 		c := make([]*Node, 0)
 		for _, cc := range v.Children {
 			c = append(c, cc)
