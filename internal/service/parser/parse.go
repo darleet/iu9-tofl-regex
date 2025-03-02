@@ -20,11 +20,20 @@ const (
 
 type NodeType int
 
+type Status int
+
+const (
+	Unknown Status = iota
+	VisitingChildren
+	VisitedChildren
+)
+
 type Node struct {
 	Value     rune
 	IsIgnored bool
 	GroupNum  int
 	RefToNum  int
+	status    Status
 	Type      NodeType
 	Parent    *Node
 	Children  []*Node
@@ -102,7 +111,16 @@ func (t *Tree) CheckStringrefs() error {
 					return fmt.Errorf("string ref was not initialized: %v", el.RefToNum)
 				}
 			} else if el.Type == GroupNode {
-				visited[el.GroupNum] = struct{}{}
+				if el.status == VisitingChildren {
+					visited[el.GroupNum] = struct{}{}
+					el.status = VisitedChildren
+				} else if el.status == Unknown {
+					el.status = VisitingChildren
+					st = append(st, el)
+					for i := range el.Children {
+						st = append(st, el.Children[len(el.Children)-1-i])
+					}
+				}
 			} else if el.Type == RepeatableNode {
 				newSt := make([]*Node, len(st))
 				for i := range st {
@@ -146,9 +164,10 @@ func (t *Tree) CheckStringrefs() error {
 						return f(newVisited, newSt)
 					})
 				}
-			}
-			for i := range el.Children {
-				st = append(st, el.Children[len(el.Children)-1-i])
+			} else {
+				for i := range el.Children {
+					st = append(st, el.Children[len(el.Children)-1-i])
+				}
 			}
 		}
 
