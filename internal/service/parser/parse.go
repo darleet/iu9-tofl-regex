@@ -20,16 +20,18 @@ type NodeType int
 
 type Node struct {
 	Value    rune
-	Parent   *Node
+	RefToNum int
 	Type     NodeType
+	Parent   *Node
 	Children []*Node
 }
 
 func NewNode(t NodeType, p *Node, c []*Node) *Node {
 	return &Node{
 		Value:    '0',
-		Parent:   p,
+		RefToNum: -1,
 		Type:     t,
+		Parent:   p,
 		Children: c,
 	}
 }
@@ -37,8 +39,19 @@ func NewNode(t NodeType, p *Node, c []*Node) *Node {
 func NewRuneNode(v rune, p *Node) *Node {
 	return &Node{
 		Value:    v,
-		Parent:   p,
+		RefToNum: -1,
 		Type:     SimpleNode,
+		Parent:   p,
+		Children: nil,
+	}
+}
+
+func NewRefNode(t NodeType, n int, p *Node) *Node {
+	return &Node{
+		Value:    '0',
+		RefToNum: n,
+		Type:     t,
+		Parent:   p,
 		Children: nil,
 	}
 }
@@ -117,6 +130,8 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 			if r[i+2] > maxNum {
 				maxNum = r[i+2]
 			}
+			n := NewRefNode(GroupRefNode, int(r[i+2]-'0'), st[len(st)-1])
+			st[len(st)-1].Add(n)
 			i += 4
 		} else if i < len(r)-3 && r[i] == '(' && r[i+1] == '\\' && s.IsDigit(r[i+2]) && r[i+3] == ')' {
 			grNum := int(r[i+2] - '0')
@@ -125,6 +140,8 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 					fmt.Sprintf("cannot use str ref: groups < x (%v < %c)", grCount, r[i+2]),
 				)
 			}
+			n := NewRefNode(StringRefNode, int(r[i+2]-'0'), st[len(st)-1])
+			st[len(st)-1].Add(n)
 			tr.StrictGroups[grNum] = tr.Groups[grNum]
 			i += 4
 		} else if i < len(r)-1 && r[i] == '\\' && s.IsDigit(r[i+1]) {
@@ -134,6 +151,8 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 					fmt.Sprintf("cannot use str ref: groups < x (%v < %c)", grCount, r[i+1]),
 				)
 			}
+			n := NewRefNode(StringRefNode, int(r[i+1]-'0'), st[len(st)-1])
+			st[len(st)-1].Add(n)
 			tr.StrictGroups[grNum] = tr.Groups[grNum]
 			i += 2
 		} else if r[i] == '(' {
@@ -166,6 +185,20 @@ func (s *Service) Parse(ctx context.Context, regex string) (*Tree, error) {
 	}
 
 	for _, v := range tr.StrictGroups {
+		c := make([]*Node, 0)
+		for _, cc := range v.Children {
+			c = append(c, cc)
+		}
+
+		var j int
+		for j < len(c) {
+			if c[j].Type == GroupRefNode {
+				return nil, errors.New("strict group can't have group ref")
+			}
+			c = append(c, c[j].Children...)
+			j++
+		}
+
 		p := v.Parent
 		for p != nil {
 			if p.Type == AlternativeNode {

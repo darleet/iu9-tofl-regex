@@ -34,6 +34,7 @@ func TestService_Parse(t *testing.T) {
 		{"invalid/незакрытые_скобки", "((aa)abaa", true},
 		{"invalid/неоткрытые_скобки", "aa)aaab", true},
 		{"invalid/групп_захвата_больше_9", "((((((((((a)a)a)a)a)a)a)a)a)a)", true},
+		{"", "(a|(?2))(a|(bb\\1))", true},
 		{"invalid/ссылка_на_альтернативу_с_астериском", "(a|b)*\\1", true},
 		{"invalid/ссылка_на_ветку_альтернативы", "(a(bb)|b(cc))\\2", true},
 	}
